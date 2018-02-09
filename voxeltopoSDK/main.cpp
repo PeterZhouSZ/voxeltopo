@@ -70,18 +70,18 @@ int main( int _argc, char ** _argv )
 		/* now make volume */
 		Volume vol( res, res, res );
 		cout << "Volume space alloc.ed." << endl;
+		cout << "computing space transform: volume -> mesh..." << endl;
+		auto vol_box = synthdata::Generator::mkBBoxForVol( &vol );
+		auto vol2mesh = synthdata::Generator::computeSpaceTransform( vol_box, mesh->bbox );
 		if ( FLAGS_md == "i" )
 		{
-			cout << "computing space transform: volume -> mesh..." << endl;
-			auto vol_box = synthdata::Generator::mkBBoxForVol( &vol );
-			auto vol2mesh = synthdata::Generator::computeSpaceTransform( vol_box, mesh->bbox );
 			cout << "making intensity volume" << endl;
 			synthdata::Generator::mkIntensityVol( mesh, vol2mesh, &vol, synthdata::MVCInten() );
 		}
 		else if ( FLAGS_md == "s" )
 		{
 			cout << "making SDF volume" << endl;
-			synthdata::Generator::mkSDFVol( mesh, &vol );
+			synthdata::Generator::mkSDFVol( mesh, vol2mesh, &vol, synthdata::SDFInten() );
 		}
 
 		/* clean-up */

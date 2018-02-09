@@ -37,10 +37,10 @@ namespace synthdata
 	// the function: a triangle -> (intensity,weight)
 	// used to derive an intensity volume given a mesh
 	using std::function;
-	typedef function<vec2( TriMesh*, int, point )> intenFunc;
+	typedef function<vec2( TriMesh*, int, const point& )> intenFunc;
 	struct SimpleInten
 	{
-		vec2 operator () (TriMesh* _msh, int _fi, point _v)
+		vec2 operator () (TriMesh* _msh, int _fi, const point& _v)
 		{
 			auto c = _msh->centroid( _fi );
 			vec3 v2c = c - _v; 
@@ -56,7 +56,7 @@ namespace synthdata
 	{
 		inline int i_m_1( int _i ) { return ( _i - 1 + 3 ) % 3; }
 		inline int i_p_1( int _i ) { return ( _i + 1 ) % 3; }
-		vec2 operator() ( TriMesh* _msh, int _fi, point _x )
+		vec2 operator() ( TriMesh* _msh, int _fi, const point& _x )
 		{
 			double cur_eps = _msh->bbox.size().max() * eps;
 			auto f = _msh->faces[ _fi ];
@@ -127,6 +127,50 @@ namespace synthdata
 			return vec2( scalar, w );
 		}
 	};
+	struct SDFInten
+	{
+		vec2 operator() ( TriMesh* _msh, int _fi, const point& _x )
+		{
+			double d = 0.0;
+			double good_face = 1; // good by default
+			auto f = _msh->faces[ _fi ];
+
+			// dist from x to the plane of face fi
+			vec3 nrml = _msh->trinorm( _fi );
+			double nrml_l = trimesh::len( nrml );
+			if ( nrml_l < eps )
+			{
+				d = 0.0;
+			}
+			else
+			{
+				nrml /= nrml_l;
+				vec3 x2v = _msh->vertices[ f[ 0 ] ] - _x;
+				d = x2v.dot( nrml );
+			}
+
+			/* does x project to inside of the face? 
+			** compute normal of sub-tri: <proj, v_i, v_i+1>,
+			** then check consistency with the input tri normal
+			*/
+			auto proj_x = _x + float( d ) * nrml;
+			vec3 x2v[ 3 ];
+			for ( auto i = 0; i < 3; ++i )
+				x2v[ i ] = _msh->vertices[ f[ i ] ] - _x;
+			// compute sub-tri normal
+			vec3 nrml_subtri;
+			for ( auto i = 0; i < 3; ++i )
+			{
+				nrml_subtri = x2v[ i ].cross( x2v[ ( i + 1 ) % 3 ] );
+				if ( nrml_subtri.dot( nrml ) < 0.0 ) // inconsistent?
+				{
+					good_face = -1;
+					break;
+				}
+			}
+			return vec2( std::abs(d), good_face );
+		}
+	};
 	/*
 	** implementation of common defs
 	*/
@@ -159,7 +203,7 @@ namespace synthdata
 		// make an intensity volume
 		static void mkIntensityVol( TriMesh* _msh, const trimesh::xform& _vox2mesh, Volume* _vol, const intenFunc& _ifun );
 		// make a signed-distance-function volume
-		static void mkSDFVol( TriMesh* _msh, Volume* _vol );
+		static void mkSDFVol( TriMesh* _msh, const trimesh::xform& _vox2mesh, Volume* _vol, const intenFunc& _ifun );
 		/*
 		** operations on volume
 		*/
@@ -199,7 +243,12 @@ namespace synthdata
 		const auto& adj_faces = _msh->adjacentfaces[ near_vi ];
 		auto near_v = _msh->vertices[ near_vi ];
 		bool good_orient = false;
-		for ( auto fi : adj_faces )
+		vec3 nrml = _msh->normals[ near_vi ];
+		if ( ( outside_p - near_v ).dot( nrml ) > 0.0f )
+		{
+			good_orient = true;
+		}
+		/*for ( auto fi : adj_faces )
 		{
 			vec3 nrml = _msh->trinorm( fi );
 			if ( ( outside_p - near_v ).dot( nrml ) > 0.0f )
@@ -207,7 +256,7 @@ namespace synthdata
 				good_orient = true;
 				break;
 			}
-		}
+		}*/
 		if ( !good_orient )
 		{
 			trimesh::faceflip( _msh );
@@ -254,9 +303,78 @@ namespace synthdata
 				}
 			}
 	}
-	void Generator::mkSDFVol( TriMesh* _msh, Volume* _vol )
+	void Generator::mkSDFVol( TriMesh* _msh, const trimesh::xform& _vox2mesh, Volume* _vol, const intenFunc& _ifun )
 	{
+		const auto& faces = _msh->faces;
+		const auto& vts = _msh->vertices;
+		point vox_c, v_smpl;
+		double min_val = numeric_limits<double>::max();
+		double max_val = numeric_limits<double>::min();
+		for ( int i = 0; i < _vol->getSizeX(); ++i )
+		{
+			for ( int j = 0; j < _vol->getSizeY(); ++j )
+			{
+				for ( int k = 0; k < _vol->getSizeZ(); ++k )
+				{
+					vox_c = point( i, j, k ) + point( 0.5f );
+					SpaceConverter::fromVoxToModel( vox_c, v_smpl, _vox2mesh );
+					
+					// dbg
+					double min_d = numeric_limits<double>::max();
+					int min_vi = 0;
+					for ( auto ii = 0; ii < vts.size(); ++ii )
+					{
+						auto v = vts[ ii ];
+						auto d = trimesh::dist( v, v_smpl );
+						if ( d < min_d )
+						{
+							min_d = d;
+							min_vi = ii;
+						}
+					}
+					double sign = _msh->normals[ min_vi ].dot( vts[ min_vi ] - v_smpl ) > 0.0 ? 1 : -1;
+					double d = sign * min_d;
 
+					/* now compute signed distance to the closest element (face / vert) */
+					// first, find the distance to the closest mesh face
+					//double min_d = numeric_limits<double>::max();
+					//int fi_cand = -1;
+					//for ( auto fi = 0; fi < vts.size(); ++fi )
+					//{
+					//	auto res = _ifun( _msh, fi, v_smpl );
+					//	auto d = res[ 0 ];
+					//	auto good_face = res[ 1 ];
+					//	if ( good_face > 0.0f && d < min_d )
+					//	{
+					//		fi_cand = fi;
+					//		min_d = d;
+					//	}
+					//}
+					//auto f = faces[ fi_cand ];
+					//// second, iterate thru each vert to see if even smaller distance can be found
+					//int min_vi = -1;
+					//for ( auto vi = 0; vi < vts.size(); ++vi )
+					//{
+					//	auto v = vts[ vi ];
+					//	auto d = trimesh::dist( v, v_smpl );
+					//	if ( d < min_d )
+					//	{
+					//		min_d = d;
+					//		min_vi = vi;
+					//	}
+					//}
+					//int vi = min_vi >= 0 ? min_vi : faces[ fi_cand ][ 0 ];
+					//// the sign of the distance
+					//double sign = _msh->normals[ vi ].dot( vts[ vi ] - v_smpl ) > 0.0 ? 1 : -1;
+					//// now we have the signed-distance
+					//double d = sign*min_d;
+					_vol->setDataAt( i, j, k, d );
+					min_val = std::min( min_val, d );
+					max_val = std::max( max_val, d );
+				}
+			}
+		}
+		printf( "SDF vol range [%f, %f] \n", min_val, max_val );
 	}
 	void Generator::addNoise( Volume* _vol, double _g_v )
 	{
@@ -290,12 +408,21 @@ namespace synthdata
 	}
 	xform Generator::computeSpaceTransform( const box3& _bbox1, const box3& _bbox2 )
 	{
-		auto c1 = trimesh::mix( _bbox1.min, _bbox1.max, 0.5f );
-		auto s1 = _bbox1.size();
-		auto c2 = trimesh::mix( _bbox2.min, _bbox2.max, 0.5f );
-		auto s2 = _bbox2.size();
+		auto c1 = _bbox1.center();
+		auto c2 = _bbox2.center();
+		// find max len of box2
+		int max_axis = 0;
+		double s2 = 0.0;
+		for ( auto i = 0; i < 3; ++i )
+		{
+			if ( s2 < _bbox2.size()[ i ] )
+			{
+				max_axis = i;
+				s2 = _bbox2.size()[ i ];
+			}
+		}
 		s2 *= 1.1; // shrink mesh a little bit
-		auto r = s2 / s1;
-		return xform::trans( c2 ) * xform::scale( r[ 0 ], r[ 1 ], r[ 2 ] ) * xform::trans( -c1 );
+		double r = s2 / _bbox1.size()[max_axis];
+		return xform::trans( c2 ) * xform::scale( r ) * xform::trans( -c1 );
 	}
 }
