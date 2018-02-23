@@ -34,13 +34,11 @@ static bool processMode( const char* _flagname, const std::string& _value )
 }
 DEFINE_validator( md, processMode );
 // options for mode "i" and "s"
-DEFINE_string( I, "not-specified", "input mesh for which certain function will be generated. REQUIRED." );
+DEFINE_string( I, "not-specified", "input mesh or volume. REQUIRED." );
 DEFINE_double( r, 0, "resolution of output volume. REQUIRED." );
 // options for mode "n"
-DEFINE_string( V, "not-specified", "input volume for which certain operation will be performed. REQUIRED." );
 DEFINE_double( ns, 0.001, "noise scale (w.r.t. value range in given volume). OPTIONAL." );
 
-void printUsage();
 int main( int _argc, char ** _argv )
 {
 	google::SetUsageMessage( "\
@@ -63,8 +61,6 @@ int main( int _argc, char ** _argv )
 			cout << "Error: Cannot read mesh from file " << mesh_filename << endl;
 			exit( -1 );
 		}
-		mesh->need_bbox();
-		mesh->need_normals();
 		synthdata::Generator::enforceNormalsOutward( mesh );
 
 		/* now make volume */
@@ -82,6 +78,7 @@ int main( int _argc, char ** _argv )
 		{
 			cout << "making SDF volume" << endl;
 			synthdata::Generator::mkSDFVol( mesh, vol2mesh, &vol, synthdata::SDFInten() );
+			//synthdata::Generator::mkSDFVol_3rdparty( mesh, vol2mesh, &vol );
 		}
 
 		/* clean-up */
@@ -98,7 +95,7 @@ int main( int _argc, char ** _argv )
 	}
 	else if ( FLAGS_md == "n" )
 	{
-		fs::path vol_in_fn = FLAGS_V;
+		fs::path vol_in_fn = FLAGS_I;
 		fs::path vol_out_fn = vol_in_fn;
 		auto ext = vol_in_fn.extension().string();
 		vol_out_fn.replace_filename( vol_in_fn.filename().stem().string() + "_n" + ext );
@@ -125,9 +122,4 @@ int main( int _argc, char ** _argv )
 	}
 
 	return 0;
-}
-
-void printUsage( int _argc, char ** _argv )
-{
-	cout << google::ProgramUsage() << endl;
 }

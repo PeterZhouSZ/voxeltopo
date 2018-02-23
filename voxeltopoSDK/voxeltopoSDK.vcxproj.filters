@@ -13,15 +13,50 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="SDFGen">
+      <UniqueIdentifier>{8e459063-a062-4e7f-92fb-a6aa5cd4a7c2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SDFGen\makelevelset3.cpp">
+      <Filter>SDFGen</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="synth_data_generator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SDFGen\array2.h">
+      <Filter>SDFGen</Filter>
+    </ClInclude>
+    <ClInclude Include="SDFGen\array3.h">
+      <Filter>SDFGen</Filter>
+    </ClInclude>
+    <ClInclude Include="SDFGen\hashgrid.h">
+      <Filter>SDFGen</Filter>
+    </ClInclude>
+    <ClInclude Include="SDFGen\hashtable.h">
+      <Filter>SDFGen</Filter>
+    </ClInclude>
+    <ClInclude Include="SDFGen\makelevelset3.h">
+      <Filter>SDFGen</Filter>
+    </ClInclude>
+    <ClInclude Include="SDFGen\util.h">
+      <Filter>SDFGen</Filter>
+    </ClInclude>
+    <ClInclude Include="SDFGen\vec.h">
+      <Filter>SDFGen</Filter>
+    </ClInclude>
+    <ClInclude Include="SDFGen\array1.h">
+      <Filter>SDFGen</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="SDFGen\README.md">
+      <Filter>SDFGen</Filter>
+    </None>
   </ItemGroup>
 </Project>
